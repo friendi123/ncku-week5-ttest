@@ -1,0 +1,58 @@
+Table: Group Statistics
+,Group,N,Mean,Std. Deviation,S.E. Mean
+x,1.00,4,2.75,.96,.48
+,2.00,2,6.00,1.41,1.00
+
+Table: Independent Samples Test
+,,Levene's Test for Equality of Variances,,T-Test for Equality of Means,,,,,,
+,,F,Sig.,t,df,Sig. (2-tailed),Mean Difference,Std. Error Difference,95% Confidence Interval of the Difference,
+,,,,,,,,,Lower,Upper
+x,Equal variances assumed,.67,.460,-3.44,4.00,.026,-3.25,.94,-5.87,-.63
+,Equal variances not assumed,,,-2.93,1.48,.139,-3.25,1.11,-10.02,3.52
+
+Table: Paired Sample Statistics
+,,N,Mean,Std. Deviation,S.E. Mean
+Pair 1,x,7,4.57,2.64,1.00
+,y,7,5.00,2.71,1.02
+
+Table: Paired Samples Correlations
+,,N,Correlation,Sig.
+Pair 1,x & y,7,.934,.002
+
+Table: Paired Samples Test
+,,Paired Differences,,,,,t,df,Sig. (2-tailed)
+,,Mean,Std. Deviation,S.E. Mean,95% Confidence Interval of the Difference,,,,
+,,,,,Lower,Upper,,,
+Pair 1,x - y,-.43,.98,.37,-1.33,.47,-1.16,6,.289
+
+Table: One-Sample Statistics
+,N,Mean,Std. Deviation,S.E. Mean
+x,7,4.57,2.64,1.00
+
+Table: One-Sample Test
+,Test Value = 4.8,,,,,
+,t,df,Sig. (2-tailed),Mean Difference,95% Confidence Interval of the Difference,
+,,,,,Lower,Upper
+x,-.23,6,.826,-.23,-2.67,2.21
+
+Table: Ranks
+,,N,Mean Rank,Sum of Ranks
+x,1.00,4,2.50,10.00
+,2.00,3,6.00,18.00
+,Total,7,,
+
+Table: Test Statistics
+,Mann-Whitney U,Wilcoxon W,Z,Asymp. Sig. (2-tailed)
+x,.00,10.00,-2.14,.032
+
+Table: Ranks
+,,N,Mean Rank,Sum of Ranks
+x - y,Negative Ranks,3,2.67,8.00
+,Positive Ranks,1,2.00,2.00
+,Ties,3,,
+,Total,7,,
+
+Table: Test Statistics
+,x - y
+Z,-1.13
+Asymp. Sig. (2-tailed),.257

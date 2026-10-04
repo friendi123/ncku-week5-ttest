@@ -1,0 +1,487 @@
+---
+title: "Week 5: Are These Airbnb Differences Real?"
+subtitle: "T-tests in SPSS and PSPP (practice handout)"
+author: "NCKU | Maxwell K. Hsu"
+format:
+  docx:
+    from: markdown-smart
+    output-file: Week5_SPSS_Ttest_Practice.docx
+    toc: false
+    number-sections: false
+jupyter: python3
+execute:
+  echo: false
+  warning: false
+---
+
+```{python}
+# Every number in this handout comes from expected_results.json through _results.py
+from IPython.display import Markdown, display
+
+import _results as R
+
+r = R.load()
+meta = r["meta"]
+s1, s2, s3, s4 = (r[p]["shown"] for p in ("part1", "part2", "part3", "part4"))
+
+# Lesson wording follows the actual numbers (as the Colab notebook does)
+p1, p2 = r["part1"], r["part2"]
+if p1["levene_p"] < 0.05:
+    levene_text = (f"Here F = {s1['levene_F']} and Sig. = {s1['levene_p']}, below .05: the spreads differ, "
+                   "which is one more reason to read the Welch row.")
+else:
+    levene_text = (f"Here F = {s1['levene_F']} and Sig. = {s1['levene_p']}, not below .05; "
+                   "we still read the Welch row, as the safe default.")
+if p1["welch"]["p"] < 0.05 and p2["welch"]["p"] >= 0.05:
+    lesson2 = ("Outliers can fool a t-test. The Part 1 result was significant only because of a few extreme prices. "
+               "Always look at the data and the medians before you trust a p-value.")
+else:
+    lesson2 = ("Outliers can change a t-test result. Compare Part 1 with Part 2, and always look at the data "
+               "and the medians before you trust a p-value.")
+p3 = r["part3"]
+if p3["p"] < 0.05 and p3["size_word"] == "tiny":
+    lesson3 = (f"With more than {p3['n'] // 1000 * 1000:,} listings, even a very small difference becomes "
+               f"“significant”. Significant does not mean important. Here {R.p_report(s3['p'])}, but "
+               f"Cohen's d = {R.d2(p3['d'])} is {p3['size_word']}. The effect size tells you whether it matters.")
+else:
+    lesson3 = (f"Here {R.p_report(s3['p'])} and Cohen's d = {R.d2(p3['d'])} ({p3['size_word']}). "
+               "Always read the effect size next to the p-value.")
+# Effect-size alert wording follows the numbers
+dp, dc = R.d2(p1["d_pooled"]), R.d2(p1["d_colab"])
+if dp == dc and R.size_word(p1["d_colab"]) == p1["size_word"]:
+    alert_both = f"Both round to {dp}, and both are {p1['size_word']}."
+else:
+    alert_both = (f"They round to {dp} and {dc}; the size words are {p1['size_word']} "
+                  f"and {R.size_word(p1['d_colab'])}.")
+hand3 = R.hand_d_from_shown("part3")
+if R.size_word(hand3) == p3["size_word"]:
+    alert_round = "The size word is the same."
+else:
+    alert_round = "Here even the size word changes, so compute d from unrounded values if you can."
+p4 = r["part4"]
+if p4["ci_mean_low"] <= R.TEST_VALUE <= p4["ci_mean_high"]:
+    stuck4 = "Here 4.8 is inside that range, so we have no evidence that the average differs from 4.8."
+else:
+    stuck4 = "Here 4.8 is outside that range, so the average is probably different from 4.8."
+```
+
+## What you will learn
+
+Last week you compared two categories with a Chi-square test. This week the outcome is a **number** (a price or a score), and you ask: is a difference between averages **real**, or could it be **chance**? A **t-test (t 檢定)** helps you answer that question.
+
+1. Turn a business question into a research question and two hypotheses.
+2. Decide when a t-test fits a question, and which kind of t-test to use.
+3. Run an independent-samples, a paired, and a one-sample t-test in SPSS or PSPP.
+4. Read the output, and report a p-value, an effect size, and a confidence interval in plain English.
+
+**Why this matters to you:** managers often ask, "Is this difference real?" A t-test gives an honest answer. Knowing how to explain it makes your analysis trustworthy.
+
+**How this handout works**
+
+- Parts 1-5 are the **core track**. Everyone does them.
+- Part 6, **Going further**, is optional and not graded.
+- Each part follows the same steps: research question, why a t-test fits, hypotheses, look first, run the test, read the output, report it. If you feel lost, read the **Stuck?** tip at the end of the part.
+- At the end, **Check your results** lists the numbers you should get for Parts 1-4.
+
+## Which tool should I use?
+
+You may do this exercise in **Google Colab**, **IBM SPSS**, or **GNU PSPP**. All three use the same data and the same questions, and they give the same answers (n, means, mean differences, t, df, p-values, and 95% confidence intervals). Pick the tool you will use in your own research.
+
+| Tool | Cost | How you run it | Cohen's d |
+|---|---|---|---|
+| Google Colab | Free (Google account) | The notebook `03_ttest_airbnb.ipynb` | Printed by the notebook |
+| IBM SPSS (version 27 or later) | University licence | Menus, or the syntax file `Week5_Ttest.sps` | Effect Sizes table |
+| GNU PSPP | Free: gnu.org/software/pspp | Menus (similar to SPSS), or the same syntax file | Compute it by hand (Part 1 shows how) |
+
+This handout shows the SPSS menus first, then the **syntax** (the commands behind the menus). The syntax works in both SPSS and PSPP; it was checked with GNU PSPP `{python} R.pspp_version()`.
+
+**To run the syntax file:** put `Week5_Ttest.sps` and `nyc_airbnb_ttest.sav` in the same folder. Open the syntax with File > Open > Syntax. Select the commands for one part and click Run > Selection (or run everything with Run > All). Run the parts **in order**: Part 6 uses `ln_price`, which Part 1 creates.
+
+## Open the data
+
+Click File > Open > Data and choose `nyc_airbnb_ttest.sav`. In syntax:
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Open the data file", "GET FILE"))
+```
+
+If `GET FILE` fails (SPSS looks in its working folder, not in the folder of the syntax file), open the data with File > Open > Data, then run the syntax from the next command.
+
+**Check:** the Data View should show `{python} f"{meta['n_rows']:,}"` cases (rows), one per NYC Airbnb listing. Nothing has been removed.
+
+**Variable View tour.** Click the Variable View tab at the bottom of the window. Each row is one variable:
+
+| Variable | What it holds |
+|---|---|
+| `id` | Listing ID |
+| `host_type` | 1 = Superhost, 2 = Other host |
+| `room_type` | 1 = Entire home/apt, 2 = Private room, 3 = Hotel room, 4 = Shared room |
+| `accommodates` | Number of guests |
+| `price` | Nightly price (USD) |
+| `price_outlier` | 0 = No, 1 = Yes (extreme price, flagged in the Week 3 cleaning) |
+| `review_scores_rating` | Overall rating (0-5) |
+| `review_scores_cleanliness` | Cleanliness rating (0-5) |
+| `review_scores_location` | Location rating (0-5) |
+
+Look at the **Values** column (the number codes and their labels) and the **Measure** column (nominal for groups, scale for numbers). `{python} f"{meta['n_host_missing']:,}"` listings have an unknown host type. They are **system-missing** (a dot in the Data View). Some listings also have no price or no rating. SPSS and PSPP leave missing values out of each test automatically, so the n in each output table is smaller than `{python} f"{meta['n_rows']:,}"`.
+
+## Stats in 5 minutes
+
+Read this once. Come back to it whenever you need it.
+
+| Term | Plain English | Airbnb example |
+|---|---|---|
+| **Mean (平均數)** | The average. Add all values and divide by how many there are. | The average nightly price. |
+| **Median (中位數)** | The middle value when you sort from low to high. Extreme values do not move it much. | Half of listings cost less than the median price. |
+| **Sample (樣本)** | The data we have. We use it to learn about a bigger group. | These listings stand for NYC Airbnb listings in general. |
+| **Hypothesis (假設)** | A claim we test. H0 (null, 虛無假設) says "no difference". H1 (alternative, 對立假設) says "there is a difference". | H0: superhosts and other hosts charge the same on average. |
+| **p-value (p 值)** | If there were really no difference, how surprising would our result be? A small p (below .05) means "probably a real difference". | p = .30: not surprising, no evidence of a difference. p < .001: very surprising, a real difference is likely. |
+| **Effect size, Cohen's d (效果量)** | How big the difference is, in standard units. Read it like a traffic light: under 0.2 tiny, 0.2 to 0.5 small, 0.5 to 0.8 medium, 0.8 or more large. | d = 0.05: the groups are almost the same, even if p is small. |
+| **95% confidence interval (95% 信賴區間)** | The likely range for the true difference. | "Between 2 and 9 dollars more per night." |
+
+**Two rules to remember**
+
+1. A small p-value says a difference is probably **real**. It does not say the difference is **big**.
+2. Always report the effect size next to the p-value.
+
+## Choosing a test
+
+Start from your question, not from the test.
+
+| Ask yourself | If the answer is... | Use | SPSS menu |
+|---|---|---|---|
+| Is my outcome a number (price, score)? | Yes | A t-test can fit. (If it is a category, such as yes/no, use a Chi-square test, as in Week 4.) | |
+| How many groups do I compare? | Two separate groups (each listing is in one group only) | **Independent-samples t-test (獨立樣本 t 檢定)**, Parts 1, 2, 5 | Analyze > Compare Means > Independent-Samples T Test |
+| | Two scores from the **same** listings | **Paired-samples t-test (成對樣本 t 檢定)**, Part 3 | Analyze > Compare Means > Paired-Samples T Test |
+| | One group against a fixed target number | **One-sample t-test (單一樣本 t 檢定)**, Part 4 | Analyze > Compare Means > One-Sample T Test |
+| Do a few extreme values dominate? | Yes | Check the medians and rerun without the outliers (Part 2), or use a rank-based test (Part 6) | Data > Select Cases; Analyze > Nonparametric Tests > Legacy Dialogs |
+
+In SPSS 29 and later, the menu is called Analyze > **Compare Means and Proportions**.
+
+## Reading SPSS output
+
+SPSS and PSPP print the same kinds of tables. Five things to look for:
+
+1. **Sig. (2-tailed)** is the **p-value**. It is two-tailed: it tests for a difference in either direction.
+2. **".000" means "p < .001"**. It does not mean that p is zero: SPSS rounds to three decimals, and a p-value is never exactly zero. Write **p < .001** in your report.
+3. **Levene's Test for Equality of Variances** (變異數同質性檢定) appears only in the independent-samples table. It decides between two rows: "Equal variances assumed" (Student's t-test) and "**Equal variances not assumed**" (Welch's t-test). In this course we read the Welch row, the safe default (Part 1 explains why).
+4. **Mean Difference** is the first group's mean minus the second group's mean (for example, superhosts minus other hosts). A negative value means the first group is lower.
+5. **95% Confidence Interval of the Difference** (Lower, Upper) is the likely range for the true difference. If it does not include 0, the difference is significant at .05.
+
+SPSS also drops the zero before the decimal point (".94" means 0.94). In your report, write the zero for numbers that can be larger than 1 (means, differences, d), and leave it out for p-values (p = .036).
+
+::: {.callout-note}
+## SPSS users
+The numbers in this handout are what PSPP prints. SPSS often prints more decimals (for example, t = `{python} R.d3(p1["welch"]["t"])` instead of `{python} s1["t_welch"]`). Round your SPSS numbers to the decimals shown in this handout before you compare them. In SPSS 27 or later, the p-value column is called **Significance**, with two columns: **One-Sided p** and **Two-Sided p**. Always read **Two-Sided p** (never One-Sided p); it is the same p-value as "Sig. (2-tailed)".
+:::
+
+## Part 1: Do superhosts charge a different price?
+
+*You are here: Part 1 of 5 (core).*
+
+### Research question
+
+Airbnb gives the **superhost (超讚房東)** badge to experienced, highly rated hosts. Pricing question: **Do superhosts charge a different nightly price from other hosts?** If they do, the badge may support a price premium.
+
+### Why a t-test fits
+
+- The outcome is a **number**: nightly price.
+- There are **two separate groups**: each host is either a superhost or not.
+- We compare the **averages** of the two groups.
+
+So we use an **independent-samples t-test**. We use **Welch's version**, the safe default, because the two groups have different sizes and spreads.
+
+### Hypotheses
+
+- **H0:** Superhosts and other hosts charge the same average price.
+- **H1:** Superhosts and other hosts charge different average prices.
+
+### Look first
+
+Always look at the data before you test it. A few listings cost thousands of dollars a night, so a boxplot of raw prices is squashed flat. Make a log price first, then draw one box per group.
+
+- **SPSS menus:** Transform > Compute Variable. Target Variable: `ln_price`; Numeric Expression: `LN(price)`; OK. Then Analyze > Descriptive Statistics > Explore. Dependent List: `ln_price`; Factor List: `host_type`; Display: Plots; Plots: Boxplots, Factor levels together; OK.
+
+**Check:** the line inside each box is the median. Are the two medians far apart?
+
+::: {.callout-note}
+## PSPP users
+PSPP's Explore (EXAMINE) also prints an empty "Tests of Normality" table. Ignore it; the boxplot is what you need.
+:::
+
+### Run the test
+
+- **SPSS menus:** Analyze > Compare Means > Independent-Samples T Test. Test Variable(s): `price`. Grouping Variable: `host_type`; click Define Groups, type 1 for Group 1 and 2 for Group 2; Continue; OK. In SPSS 27 or later, keep **Estimate effect sizes** ticked.
+- **Syntax** (Part 1 of `Week5_Ttest.sps`):
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Make a log price", "VARIABLES=price."))
+```
+
+### Read the output
+
+The **Group Statistics** table shows `{python} s1["n1"]` superhosts with a mean price of `{python} s1["mean1"]` and `{python} s1["n2"]` other hosts with a mean of `{python} s1["mean2"]`.
+
+The **Independent Samples Test** table has two rows:
+
+- **Levene's test** asks whether the two groups have the same spread (variance). `{python} levene_text`
+- Read the row **"Equal variances not assumed"** (Welch's t-test). Welch's test does not need equal spreads, so it is safe whether or not Levene's test is significant. This matches the Colab notebook.
+
+In the Welch row: t = `{python} s1["t_welch"]`, df = `{python} s1["df_welch"]`, Sig. (2-tailed) = `{python} s1["p_welch"]`, Mean Difference = `{python} s1["mean_diff"]`, and the 95% Confidence Interval of the Difference runs from `{python} s1["ci_low"]` to `{python} s1["ci_high"]`. The decimal degrees of freedom are normal for Welch's test.
+
+**Effect size.** In SPSS 27 or later, the **Independent Samples Effect Sizes** table shows Cohen's d (use the "Cohen's d" row). PSPP does not print this table; compute d by hand as shown in the box below.
+
+::: {.callout-important}
+## Why your Cohen's d may differ slightly
+
+Cohen's d divides the mean difference by a standard deviation (SD). The three tools do not all use the same SD for two separate groups:
+
+| Tool | Where d comes from | Formula for two separate groups |
+|---|---|---|
+| SPSS 27 or later | Independent Samples Effect Sizes table (also shows Hedges' g and Glass's delta) | Mean difference / pooled SD |
+| PSPP | No effect-size table; compute it by hand from the Group Statistics table | Mean difference / pooled SD (formula below); the rounded table values add small rounding differences |
+| Colab notebook | `independent_test` helper | Mean difference / √((var_a + var_b) / 2) |
+
+**Pooled SD formula (for PSPP users):**
+
+$$\text{pooled SD} = \sqrt{\frac{(n_1 - 1)\,SD_1^2 + (n_2 - 1)\,SD_2^2}{n_1 + n_2 - 2}} \qquad d = \frac{\text{Mean Difference}}{\text{pooled SD}}$$
+
+**Worked example (Part 1, PSPP's Group Statistics table):** `{python} R.worked_example("part1")`. The Colab notebook prints d = `{python} R.d3(r["part1"]["d_colab"])` because it averages the two variances without weighting by group size. `{python} alert_both`
+
+- Differences in the second or third decimal are expected.
+- The size word (tiny, small, medium, large) should not change.
+- Report which tool and which formula you used, for example "Cohen's d (pooled SD) = `{python} R.d2(r["part1"]["d_pooled"])`".
+- SPSS also shows **Hedges' g**, a small-sample correction. At these sample sizes it is almost the same as d.
+- For the paired and one-sample tests (Parts 3 and 4), all three tools use the same formula (mean difference / SD of the differences; difference from the target / SD), so only rounding differs. Rounding matters most when the numbers are small: PSPP's Part 3 table shows a mean difference of `{python} s3["mean_diff"]` and an SD of `{python} s3["sd_diff"]`, which gives `{python} R.d3(R.hand_d_from_shown("part3"))`, while the unrounded value is `{python} R.d3(r["part3"]["d"])`. `{python} alert_round`
+:::
+
+### How to report it
+
+> `{python} R.fmt_report("part1")`
+
+**Stuck?** Reread "Stats in 5 minutes". Or ask an AI tool: "Explain this result to a first-year student in three sentences:" and paste the two output tables.
+
+## Part 2: Is that difference real, or caused by a few extreme listings?
+
+*You are here: Part 2 of 5 (core).*
+
+### Research question
+
+**Is the price difference in Part 1 real, or is it caused by a few listings with extreme prices?**
+
+In the Week 3 cleaning notebook we flagged price **outliers (離群值)** in the variable `price_outlier`. An average can move a lot because of a few extreme values. A median does not. So we use two simple checks. No new test is needed:
+
+1. Compare the **medians** of the two groups.
+2. Run the **same** t-test again **without** the flagged outliers.
+
+### Compare the medians
+
+- **SPSS menus:** Analyze > Descriptive Statistics > Explore. Dependent List: `price` (not `ln_price`); Factor List: `host_type`; Display: Statistics (or Both); OK.
+- **Syntax:**
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Compare the medians: price for each host type", "EXAMINE VARIABLES=price"))
+```
+
+In the **Descriptives** table, find the **Median** row for each host type. (If there is also a table for all listings together, use the one split by host type.)
+
+**Check:** compare the two medians yourself. Are they far apart, or close together? Compare that with the gap between the two means in Part 1.
+
+### Run the test without the outliers
+
+- **SPSS menus:** Data > Select Cases. Choose "If condition is satisfied", click If, type `price_outlier = 0`, Continue. Under Output choose "Filter out unselected cases"; OK. Then run the Part 1 t-test again (Analyze > Compare Means > Independent-Samples T Test).
+- **Afterwards, switch the filter off:** Data > Select Cases > All cases > OK. If you forget, Parts 3, 4 and 6 silently use fewer listings.
+- **Syntax:**
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Mark the listings that are not price outliers", "FILTER OFF."))
+```
+
+::: {.callout-note}
+## PSPP users
+PSPP's Select Cases dialog is similar, but its wording differs: choose the condition option, enter `price_outlier = 0`, and make sure unselected cases are **filtered**, not deleted. Deleting removes the rows for the rest of the session. The syntax above (FILTER BY, then FILTER OFF) is the safest route.
+:::
+
+### Read the output and report it
+
+Without the outliers, the Group Statistics table shows `{python} s2["n1"]` superhosts and `{python} s2["n2"]` other hosts. In the Welch row, Sig. (2-tailed) = `{python} s2["p_welch"]`.
+
+> `{python} R.fmt_report("part2")`
+
+**Lesson:** `{python} lesson2`
+
+**Stuck?** Think of ten friends with similar incomes, and one billionaire joining the group. The average income jumps. The median hardly moves.
+
+## Part 3: Do guests rate cleanliness differently from location?
+
+*You are here: Part 3 of 5 (core).*
+
+### Research question
+
+Service-quality question: **For the same listing, do guests rate cleanliness differently from location?** If cleanliness scores are lower, hosts know where to improve.
+
+### Why a t-test fits
+
+- The outcome is a **number**: a review score from 0 to 5.
+- The two scores come from the **same listing**, so they are linked in pairs.
+- We compare the **average difference** within each pair.
+
+So we use a **paired t-test**.
+
+### Hypotheses
+
+- **H0:** On average, cleanliness and location scores are the same.
+- **H1:** On average, they are different.
+
+### Look first
+
+Make one difference per listing (cleanliness minus location) and draw its histogram. Zero means "the same score".
+
+- **SPSS menus:** Transform > Compute Variable. Target Variable: `gap`; Numeric Expression: `review_scores_cleanliness - review_scores_location`; OK. Then Graphs > Legacy Dialogs > Histogram; Variable: `gap`; OK.
+
+**Check:** most listings get similar scores for both. Is the histogram centred a little below zero, at zero, or above zero?
+
+### Run the test
+
+- **SPSS menus:** Analyze > Compare Means > Paired-Samples T Test. Move `review_scores_cleanliness` to Variable1 and `review_scores_location` to Variable2 (Pair 1); OK.
+- **Syntax:**
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Make one difference per listing", "(PAIRED)."))
+```
+
+### Read the output
+
+The **Paired Samples Test** table shows the Mean of the paired differences (`{python} s3["mean_diff"]`), t = `{python} s3["t"]`, df = `{python} s3["df"]`, and Sig. (2-tailed) = `{python} s3["p"]`. Remember: ".000" means **p < .001**. PSPP's table rounds to two decimals (SPSS and Colab show more); the report sentence below uses three decimals, as the Colab notebook prints them.
+
+### How to report it
+
+> `{python} R.fmt_report("part3")`
+
+**Lesson:** `{python} lesson3`
+
+**Stuck?** A p-value answers "Is it real?". Cohen's d answers "Is it big?". You need both answers.
+
+## Part 4: Is the average listing below the superhost standard?
+
+*You are here: Part 4 of 5 (core).*
+
+### Research question
+
+Benchmarking question: superhosts are expected to keep an overall rating of at least 4.8. **Is the average NYC listing rated below 4.8?**
+
+### Why a t-test fits
+
+- The outcome is a **number**: the overall rating.
+- We have **one group** (all rated listings) and **one fixed target** (4.8).
+
+So we use a **one-sample t-test**.
+
+### Hypotheses
+
+- **H0:** The average rating equals 4.8.
+- **H1:** The average rating is different from 4.8.
+
+### Look first
+
+- **SPSS menus:** Graphs > Legacy Dialogs > Histogram; Variable: `review_scores_rating`; OK.
+
+**Check:** where is 4.8 on the histogram? Are most ratings above or below it?
+
+### Run the test
+
+- **SPSS menus:** Analyze > Compare Means > One-Sample T Test. Test Variable(s): `review_scores_rating`; Test Value: 4.8; OK.
+- **Syntax:**
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Look first: histogram of the overall ratings", "/TESTVAL=4.8"))
+```
+
+### Read the output
+
+The **One-Sample Statistics** table shows n = `{python} s4["n"]` and a mean of `{python} s4["mean"]`. The **One-Sample Test** table shows t = `{python} s4["t"]`, df = `{python} s4["df"]`, Sig. (2-tailed) = `{python} s4["p"]` (so p < .001), and a Mean Difference of `{python} s4["mean_diff"]` (the mean minus 4.8).
+
+**Two confidence intervals.** SPSS and PSPP print the "95% Confidence Interval of the Difference", which is relative to 4.8 (`{python} s4["ci_low"]` to `{python} s4["ci_high"]`). The report sentence uses the confidence interval of the **mean**, as the Colab notebook does: add 4.8 to the bounds to get the CI of the mean (`{python} R.ci_mean_arithmetic()`).
+
+### How to report it
+
+> `{python} R.fmt_report("part4")`
+
+**Stuck?** The confidence interval is the likely range for the true average. `{python} stuck4`
+
+## Part 5: Your turn
+
+*You are here: Part 5 of 5 (core).*
+
+Question to explore: entire homes and private rooms. Which one costs more **per guest**? Use the listings that are not price outliers.
+
+Before you run anything, write these in your notes:
+
+1. **Research question:** ______________________________
+2. **Why a t-test fits:** Is the outcome a number? Are the groups separate or paired?
+3. **Hypotheses:** H0: ______________________ H1: ______________________
+
+### Run the test
+
+- **SPSS menus:** Transform > Compute Variable. Target Variable: `price_per_guest`; Numeric Expression: `price / accommodates`; OK. Data > Select Cases > If condition is satisfied: `price_outlier = 0 AND room_type <= 2` (entire homes and private rooms, no outliers); Filter out unselected cases; OK. Analyze > Compare Means > Independent-Samples T Test. Test Variable: `price_per_guest`; Grouping Variable: `room_type`, groups 1 and 2; OK. Then switch the filter off (Data > Select Cases > All cases).
+- **Syntax:**
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Make the nightly price per guest", "FILTER OFF."))
+```
+
+Then read the Welch row, compute or read Cohen's d, and write the report sentence yourself.
+
+**Stuck?** Copy the Part 1 report sentence and change the names and numbers. Remember: report the difference, the test, the p-value, the effect size, and the 95% CI.
+
+## Part 6: Going further (optional)
+
+*You are here: optional extra. Not graded. Skip it if you like.*
+
+**Rank-based tests.** These tests use ranks instead of averages. Use them when extreme values dominate. The **Mann-Whitney** test asks whether one group **tends to have higher values** than the other. The **Wilcoxon signed-rank** test asks whether the within-listing differences (cleanliness minus location) **tend to be above or below zero**.
+
+- **Mann-Whitney**: two separate groups (like Part 1). SPSS menus: Analyze > Nonparametric Tests > Legacy Dialogs > 2 Independent Samples. Test Variable: `price`; Grouping Variable: `host_type` (1 and 2); Test Type: Mann-Whitney U; OK.
+- **Wilcoxon**: paired scores (like Part 3). SPSS menus: Analyze > Nonparametric Tests > Legacy Dialogs > 2 Related Samples. Pair: `review_scores_cleanliness` and `review_scores_location`; Test Type: Wilcoxon; OK.
+
+In both **Test Statistics** tables, read the row or column **Asymp. Sig. (2-tailed)**: it is the p-value.
+
+**Log price and Student's t-test.** Taking the logarithm of price pulls extreme values in: run the Part 1 t-test on `ln_price`. Student's t-test assumes both groups have the same spread. Welch's does not, so Welch's is the safer default. Student's t-test is the "Equal variances assumed" row of the Part 1 output: compare its Sig. with the Welch row.
+
+```{python}
+#| output: asis
+print(R.sps_snippet("Mann-Whitney test of price", "/VARIABLES=ln_price."))
+```
+
+**Think about it:** Does the Mann-Whitney test agree with Part 1's Welch test? Does the log-price t-test agree? Do the Student and Welch rows of Part 1 lead to the same conclusion at .05? What does that tell you about the Part 1 result?
+
+## Check your results
+
+Compare your output with this table. The numbers are what PSPP `{python} R.pspp_version()` prints; SPSS may print more decimals, so round your numbers to the decimals in the table before you compare (and read **Two-Sided p** in SPSS 27 or later). For Parts 1 and 2, compare the "Equal variances not assumed" row.
+
+```{python}
+#| output: asis
+print(R.results_table())
+print()
+print(R.results_table_note())
+```
+
+**If your numbers differ:** check that the filter is off (Data > Select Cases > All cases) before Parts 3 and 4; check that you defined the groups as 1 and 2; check that you tested `price`, not `ln_price`; and check that you read the Welch row.
+
+## Try it with AI
+
+Copy this prompt into an AI tool, and paste your Part 1 output tables (Group Statistics and Independent Samples Test) after it:
+
+> "Here is SPSS output from an independent-samples t-test. Read the 'Equal variances not assumed' (Welch) row. Explain the result to a marketing manager in three short sentences. Mention the p-value and the effect size, and say whether the difference matters in practice."
+
+Then check: did the AI read the Welch row? Did it mention the effect size? Did it say "significant" means "big"? (It should not.) If it reported a Sig. of ".000" as an exact p-value, correct it to "p < .001".
+
+---
+
+`{python} R.ATTRIBUTION`
