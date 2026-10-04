@@ -1,11 +1,8 @@
-# Track only the build sources for the SPSS/PSPP t-test module.
-# Everything else in this folder (slides, data, generated outputs) is ignored.
-/*
-!/.gitignore
-!/Week5_Ttest.sps
-!/build/
+# Build outputs (the handout PDF, the data, and the syntax file are tracked)
+/Week5_SPSS_Ttest_Practice.docx
 /build/__pycache__/
+/build/.quarto/
 /build/pspp_output.*
-/build/*.docx
 /build/pspp_output-*.png
-/build/.gitignore
+/build/*.docx
+/build/*.quarto_ipynb
